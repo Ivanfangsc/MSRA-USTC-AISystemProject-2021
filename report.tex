@@ -1,0 +1,65 @@
+\documentclass{ctexart}
+\usepackage{amsmath, subcaption, graphicx}
+
+\title{Lab 8 - 自动机器学习系统练习\\实验报告}
+\author{方书成}
+\date{\today}
+
+\begin{document}
+    \maketitle
+    \section{实验环境}
+    \begin{itemize}
+        \item CPU: AMD Ryzen 7 4800H 8核16线程
+        \item GPU: NVIDIA GeForce RTX 2060
+        \item OS: Windows 10 Insider Preview Build 21387
+        \item PyTorch 1.7.1 CUDA 10.2 NNI 2.2
+    \end{itemize}
+    \section{实验过程}
+    \subsection{原始代码}
+    超参：
+    \begin{table}[ht]
+        \centering
+        \begin{tabular}{cc|cc}
+            超参名称 & 值 & 超参名称 & 值\\
+            \hline
+            initial\_lr & 0.1 & weight\_decay & 5e-4 \\
+            ending\_lr & 0 & cutout & 0 \\
+            batch\_size & 128 & epochs & 300 \\
+            optimizer & sgd & momentum & 0.9 \\
+            grad\_clip & 0 & model & resnet18 \\
+        \end{tabular}
+    \end{table}
+
+    模型准确率：0.849100
+    \subsection{NNI自动调参}
+    起初我希望使用Annotation来进行这一部分的实验，但是似乎新版的NNI对这一部分的功能还未支持，v2 configuration的处理过程中直接将config.yml中的useAnnotation属性忽略了。所以我只能使用传统的方法。
+
+    在使用传统方法成功运行了之后，我发现网页未能正确显示中间结果，也不能接收到最终结果。在GitHub上检索一下，发现只要将pytorch的DataLoader的num\_workers设为0，即不使用并行模式，就可以正确的产生中间和最终结果。但是在这种情况下CPU的单核性能成为瓶颈，nvidia-smi显示的显卡占用率只有30\%-40\%，导致一整晚只能完成3-4个trial。为了解决这个问题，我去翻看了NNI和PyTorch的源码，并进行了实验，然后发现在使用并行模式时在顶级代码中打开的文件会在DataLoader被enumerate时被清空。再次查询后得知，这是由于Python的multiprocessing库在Windows下使用spawn模式产生子线程，在这种模式下顶级代码中的文件句柄会被丢弃，在Linux下使用fork模式时则不会产生这个问题。在NNI中Dispatcher和训练程序使用文件进行通讯，而这些文件在runtime/platform/local.py中在顶级代码被打开，继而导致了每个epoch这些文件都会被清空。所幸有一个简单的解决办法，只需要把这些文件的打开模式从w（写入）改为a（追加），在NNI的运行模式下，这些文件不会被复用，每个trial都是独立的，故不会产生冲突，在一个trial新的线程中也不会清空这些文件了。这些改动我已经提交Pull Request至GitHub并被接收。
+
+    以下是运行结果。
+    \begin{figure}[ht]
+        \centering
+        \includegraphics[width=\linewidth]{QQ截图20210523111020.png}
+    \end{figure}
+    \begin{figure}[ht]
+        \centering
+        \includegraphics[width=\linewidth]{QQ截图20210527114149.png}
+    \end{figure}
+
+    最佳trial：
+    \begin{table}[ht]
+        \centering
+        \begin{tabular}{cc|cc}
+            超参名称 & 值 & 超参名称 & 值\\
+            \hline
+            initial\_lr & 0.02757 & weight\_decay & 0.00061 \\
+            ending\_lr & 0 & cutout & 0 \\
+            batch\_size & 128 & epochs & 100 \\
+            optimizer & sgd & momentum & 0.9 \\
+            grad\_clip & 0 & model & vgg16\_bn \\
+        \end{tabular}
+    \end{table}
+    模型准确率：0.904700，比原始模型高了6\%。
+    \section{网络架构搜索}
+    在本部分中，我尝试使用NNI最新的Retiarii NAS进行实验.Retiarii 是一个支持神经体系架构搜索和超参数调优的新框架。 它允许用户以高度的灵活性表达各种搜索空间，重用许多前沿搜索算法，并利用系统级优化来加速搜索过程。我参考了nni/test/retiarii\_test/darts/来编写程序，但是一直无法运行，NNI无法识别到GPU。与助教老师和NNI开发人员沟通后，认为是Windows的问题，需要使用Linux。虚拟机无法使用CUDA，故选择了WSL2作为运行平台，为此加入了Windows Insider Preview。配置完成后torch.cuda.is\_available()显示为True，CUDA版本也符合，但是仍然无法运行程序。现在猜测是由于WSL2中没有真正的NVIDIA驱动，无法运行nvidia-smi，导致NNI和pytorch-lightning无法获取GPU信息。安装双系统时碰到了一些困难（主要涉及显卡开闭源驱动切换），在截止的时候还没有完成调试，故这项任务遗憾未能完成。
+\end{document}

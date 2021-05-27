@@ -1,0 +1,39 @@
+{
+  "initial_lr": {
+    "_type": "loguniform",
+    "_value": [
+      0.01,
+      1.0
+    ]
+  },
+  "weight_decay": {
+    "_type": "loguniform",
+    "_value": [
+      1e-4,
+      1e-3
+    ]
+  },
+  "optimizer": {
+    "_type": "choice",
+    "_value": [
+      "sgd",
+      "rmsprop",
+      "adam"
+    ]
+  },
+  "model": {
+    "_type": "choice",
+    "_value": [
+      "resnet18",
+      "resnet50",
+      "vgg16",
+      "vgg16_bn",
+      "densenet121",
+      "squeezenet1_1",
+      "shufflenet_v2_x1_0",
+      "mobilenet_v2",
+      "resnext50_32x4d",
+      "mnasnet1_0"
+    ]
+  }
+}
